@@ -11,13 +11,13 @@
 __global__ void d_winAverage(int *A, float *B, size_t size, int n) {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
 	if (i < size) {
-		B[i] = (A[i] - A[max(0, i - n)]) / n;
+		B[i] = ((float)A[i] - (float)A[max(0, i - n)]) / (float)n;
 	}
 }
 
 __host__ void winAverage(int *A, float *B, size_t size, int n) {
 	for (int i = 0; i < size; i++) {
-		B[i] = (A[i] - A[max(0, i - n)]) / n;
+		B[i] = ((float)A[i] - (float)A[max(0, i - n)]) / (float)n;
 	}
 }
 
@@ -45,7 +45,7 @@ __global__ void d_scan(int *A, int *B, size_t size) {
 			temp[index + stride] += temp[index];
 		}
 	}
-	//And copy into the output
+	//And copy into the output0078
 	__syncthreads();
 	if (i < size) {
 		B[i] = temp[threadIdx.x];
@@ -79,7 +79,7 @@ __host__ void scan(int *A, int *B, size_t size) {
 int main(void) {
 	cudaError_t err = cudaSuccess;
 	//DEFINING SOME VARIABLES TO EDIT AND STUFF
-	int vectorSizes = 10000000;
+	int vectorSizes = 1000000;
 	//uint MAX_ARRAY_SIZE = 4 * BLOCK_SIZE * BLOCK_SIZE;
 	//printf("%d", MAX_ARRAY_SIZE);
 	int windowsize = 1000;
@@ -101,7 +101,7 @@ int main(void) {
 		//srand((unsigned) time(&t));
 		//h_A[i] = rand() % 10;
 
-		h_A[i] = 1;
+		h_A[i] = 9;
 	}
 
 	//Allocate the device vectors
@@ -182,7 +182,7 @@ int main(void) {
 	//Do serial version
 	cudaEventRecord(start1, 0);
 	scan(h_A, h_B, vectorSizes);
-	//winAverage(h_B,h_C,vectorSizes, windowsize);
+	winAverage(h_B,h_C,vectorSizes, windowsize);
 	cudaEventRecord(stop1, 0);
 	cudaEventSynchronize(stop1);
 
@@ -197,51 +197,25 @@ int main(void) {
 	cudaEventRecord(start2, 0);
 	d_scan<<<blocksPerGrid, BLOCK_SIZE>>>(d_A, d_B, vectorSizes);
 	d_extract<<<blocksPerGrid, BLOCK_SIZE>>>(d_B, d_Sum1, vectorSizes);
-#ifdef COMMENTS
-	int *h_Temp3 = (int *) malloc(smallsize);
-	err = cudaMemcpy(h_Temp3, d_Sum1, smallsize, cudaMemcpyDeviceToHost);
-	if (err != cudaSuccess) {
-		fprintf(stderr, "Failed to copy host data to device data, %s\n",
-				cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
-	}
-	for (int i = 0; i < (vectorSizes/BLOCK_SIZE); i++) {
-		printf("%d: %d\n", i, h_Temp3[i]);
-	}
-#endif
-	d_scan<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum1, d_Sum1_scanned,
-			(vectorSizes / BLOCK_SIZE));
-#ifdef COMMENTS
-	err = cudaMemcpy(h_Temp3, d_Sum1_scanned, smallsize, cudaMemcpyDeviceToHost);
-	if (err != cudaSuccess) {
-		fprintf(stderr, "Failed to copy host data to device data, %s\n",
-				cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
-	}
-	for (int i = 0; i < (vectorSizes/BLOCK_SIZE); i++) {
-		printf("%d: %d\n", i, h_Temp3[i]);
-	}
-#endif
-	d_extract<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum1_scanned, d_Sum2,
-			vectorSizes / (BLOCK_SIZE * BLOCK_SIZE));
-	d_scan<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum2, d_Sum2_scanned,
-			vectorSizes / (BLOCK_SIZE * BLOCK_SIZE));
-	d_add<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum2_scanned, d_Sum1_scanned,
-			vectorSizes / BLOCK_SIZE);
+	d_scan<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum1, d_Sum1_scanned, (vectorSizes / BLOCK_SIZE));
+	/*d_extract<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum1_scanned, d_Sum2, vectorSizes / (BLOCK_SIZE * BLOCK_SIZE));
+	int *h_Temp2 = (int *) malloc(verysmallsize);
+		err = cudaMemcpy(h_Temp2, d_Sum2, verysmallsize, cudaMemcpyDeviceToHost);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to copy host data to device data, %s\n",
+					cudaGetErrorString(err));
+			exit(EXIT_FAILURE);
+		}
+		for(int i = 0; i < vectorSizes / (BLOCK_SIZE * BLOCK_SIZE); i++) {
+
+				printf(
+						"Error returned vectors not matching #%d, reg:%d, device:%d\n",
+						i, h_A[i], h_Temp2[i]);
+		}
+	d_scan<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum2, d_Sum2_scanned, vectorSizes / (BLOCK_SIZE * BLOCK_SIZE));
+	d_add<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum2_scanned, d_Sum1_scanned, vectorSizes / BLOCK_SIZE); */
 	d_add<<<blocksPerGrid, BLOCK_SIZE>>>(d_Sum1_scanned, d_B, vectorSizes);
-#ifdef COMMENTS
-	int *h_Temp2 = (int *) malloc(size);
-	err = cudaMemcpy(h_Temp2, d_B, size, cudaMemcpyDeviceToHost);
-	if (err != cudaSuccess) {
-		fprintf(stderr, "Failed to copy host data to device data, %s\n",
-				cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
-	}
-	for (int i = 0; i < (vectorSizes); i++) {
-		printf("%d: %d\n", i, h_Temp2[i]);
-	}
-#endif
-	//d_winAverage<<<blocksPerGrid, BLOCK_SIZE>>>(d_B, d_C, vectorSizes,windowsize);
+	d_winAverage<<<blocksPerGrid, BLOCK_SIZE>>>(d_B, d_C, vectorSizes,windowsize);
 	cudaEventRecord(stop2, 0);
 	cudaEventSynchronize(stop2);
 
@@ -252,8 +226,8 @@ int main(void) {
 	//Check that the result vectors are correct#
 
 	printf("Testing the result vectors\n");
-	int *h_Temp = (int *) malloc(vectorSizes * sizeof(int));
-	err = cudaMemcpy(h_Temp, d_B, size, cudaMemcpyDeviceToHost);
+	float *h_Temp = (float *) malloc(floatsize);
+	err = cudaMemcpy(h_Temp, d_C, floatsize, cudaMemcpyDeviceToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to copy host data to device data, %s\n",
 				cudaGetErrorString(err));
@@ -262,10 +236,10 @@ int main(void) {
 	bool cont = true;
 	int i = 0;
 	while (i < vectorSizes && cont == true) {
-		if ((int) h_B[i] != (int) h_Temp[i]) {
+		if ((int) h_C[i] != (int) h_Temp[i]) {
 			printf(
-					"Error returned vectors not matching #%d, reg:%d, host:%d vs device:%d\n",
-					i, h_A[i], (int) h_B[i], (int) h_Temp[i]);
+					"Error returned vectors not matching #%d, reg:%d, host:%.4f vs device:%.4f\n",
+					i, h_A[i], h_C[i], h_Temp[i]);
 			cont = false;
 		}
 		i++;
@@ -278,8 +252,8 @@ int main(void) {
 	free(h_B);
 	free(h_C);
 	free(h_Temp);
+	//free(h_Temp2);
 #ifdef COMMENTS
-	free(h_Temp2);
 	free(h_Temp3);
 #endif
 	cudaFree(d_A);
@@ -287,6 +261,7 @@ int main(void) {
 	cudaFree(d_C);
 	cudaFree(d_Sum1);
 	cudaFree(d_Sum1_scanned);
-	/*cudaFree(d_Sum2);
-	 cudaFree(d_Sum2_scanned);*/
+	cudaFree(d_Sum2);
+	cudaFree(d_Sum2_scanned);
 }
+
